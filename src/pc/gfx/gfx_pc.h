@@ -19,6 +19,7 @@ extern "C" {
 
 void gfx_init(struct GfxWindowManagerAPI *wapi, struct GfxRenderingAPI *rapi, const char *game_name, bool start_in_fullscreen);
 struct GfxRenderingAPI *gfx_get_current_rendering_api(void);
+void gfx_get_dimensions(uint32_t *width, uint32_t *height);
 void gfx_start_frame(void);
 void gfx_run(Gfx *commands);
 void gfx_end_frame(void);

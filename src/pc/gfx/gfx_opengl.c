@@ -18,13 +18,14 @@
 #define GL_GLEXT_PROTOTYPES 1
 #include "SDL_opengl.h"
 #else
+#define GL_GLEXT_PROTOTYPES 1
 #ifndef TARGET_MACOS
 #include <SDL2/SDL.h>
 #else
+#include <SDL.h>
 #include <SDL_opengl.h>
 #include <stdio.h>
 #endif
-#define GL_GLEXT_PROTOTYPES 1
 #ifndef TARGET_MACOS
 #include <SDL2/SDL_opengles2.h>
 #endif
@@ -103,6 +104,8 @@ static GLint blur_texture_location = -1;
 static GLint blur_position_location = -1;
 static GLint blur_texcoord_location = -1;
 static GLint blur_screen_width_location = -1;
+
+static void destroy_internal_framebuffer(void);
 
 static int get_display_index(void) {
     int display_index = (int) configDefaultMonitor - 1;
@@ -363,7 +366,7 @@ static void blit_internal_framebuffer(GLuint texture) {
     glGetIntegerv(GL_ARRAY_BUFFER_BINDING, &array_buffer_binding);
     
     uint32_t window_width, window_height;
-    get_display_dimensions(&window_width, &window_height);
+    gfx_get_dimensions(&window_width, &window_height);
 
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     

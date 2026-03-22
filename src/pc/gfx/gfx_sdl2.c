@@ -23,16 +23,16 @@
 #define GL_GLEXT_PROTOTYPES 1
 #include "SDL_opengl.h"
 #else
+#define GL_GLEXT_PROTOTYPES 1
 #ifndef TARGET_MACOS
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_syswm.h>
 #else
-#include <SDL_opengl.h>
 #include <SDL.h>
 #include <SDL_syswm.h>
+#include <SDL_opengl.h>
 #include <stdio.h>
 #endif
-#define GL_GLEXT_PROTOTYPES 1
 #ifndef TARGET_MACOS
 #include <SDL2/SDL_opengles2.h>
 #endif
@@ -182,6 +182,9 @@ static void gfx_sdl_init(const char *game_name, bool start_in_fullscreen) {
     window_height = DESIRED_SCREEN_HEIGHT;
 
     SDL_SetHint(SDL_HINT_TIMER_RESOLUTION, "1");
+#ifdef TARGET_MACOS
+    SDL_SetHint(SDL_HINT_VIDEO_MAC_FULLSCREEN_SPACES, "1");
+#endif
 
     SDL_Init(SDL_INIT_VIDEO);
 
@@ -191,7 +194,7 @@ static void gfx_sdl_init(const char *game_name, bool start_in_fullscreen) {
     wnd = SDL_CreateWindow(game_name,
             SDL_WINDOWPOS_UNDEFINED_DISPLAY(configDefaultMonitor-1),
             SDL_WINDOWPOS_UNDEFINED_DISPLAY(configDefaultMonitor-1),
-            window_width, window_height, SDL_WINDOW_OPENGL | SDL_WINDOW_SHOWN | SDL_WINDOW_ALLOW_HIGHDPI);
+            window_width, window_height, SDL_WINDOW_OPENGL | SDL_WINDOW_SHOWN | SDL_WINDOW_ALLOW_HIGHDPI | SDL_WINDOW_RESIZABLE);
 
 #if defined(_WIN32) || defined(_WIN64)
     // Set window icon from embedded resources
@@ -355,9 +358,21 @@ static void gfx_sdl_handle_events(void) {
                 break;
 #endif
             case SDL_WINDOWEVENT:
-                if (event.window.event == SDL_WINDOWEVENT_SIZE_CHANGED && (SDL_GetWindowFlags(SDL_GetWindowFromID(event.window.windowID)) & SDL_WINDOW_FULLSCREEN) == 0) {
-                    window_width = event.window.data1;
-                    window_height = event.window.data2;
+                if (event.window.event == SDL_WINDOWEVENT_SIZE_CHANGED) {
+                    Uint32 window_flags = SDL_GetWindowFlags(SDL_GetWindowFromID(event.window.windowID));
+                    bool is_fullscreen = (window_flags & (SDL_WINDOW_FULLSCREEN | SDL_WINDOW_FULLSCREEN_DESKTOP)) != 0;
+
+                    if (fullscreen_state != is_fullscreen) {
+                        fullscreen_state = is_fullscreen;
+                        if (on_fullscreen_changed_callback != NULL) {
+                            on_fullscreen_changed_callback(is_fullscreen);
+                        }
+                    }
+
+                    if (!is_fullscreen) {
+                        window_width = event.window.data1;
+                        window_height = event.window.data2;
+                    }
                 }
                 break;
 

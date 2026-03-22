@@ -146,7 +146,7 @@ $(BUILD_DIR)/levels/%/leveldata.elf: SEGMENT_ADDRESS := 0x07000000
 
 # TODO: Generate these rules from the level configs?
 
-define level_rules = 
+define level_rules
     $(1)_SEG7_FILES     := $$(patsubst %.png,%.inc.c,$$(wildcard levels/$(1)/*.png))
     $$(BUILD_DIR)/levels/$(1)/leveldata.o: $$(addprefix $$(BUILD_DIR)/,$$($(1)_SEG7_FILES))
     $$(BUILD_DIR)/levels/$(1)/leveldata.elf: TEXTURE_BIN := $(2)
@@ -174,9 +174,13 @@ $(eval $(call level_rules,menu,generic)) # Menu (File Select)
 # Ending cake textures are generated in a special way
 $(BUILD_DIR)/levels/ending/cake_eu.inc.c: levels/ending/cake_eu.png
 	$(call print,Splitting:,$<,$@)
+	@mkdir -p $(@D)
+	@mkdir -p $(BUILD_DIR)/textures/skybox_tiles
 	$(V)$(SKYCONV) $(SKYCONV_ARGS) --type cake-eu --split $^ $(BUILD_DIR)/levels/ending
 $(BUILD_DIR)/levels/ending/cake.inc.c: levels/ending/cake.png
 	$(call print,Splitting:,$<,$@)
+	@mkdir -p $(@D)
+	@mkdir -p $(BUILD_DIR)/textures/skybox_tiles
 	$(V)$(SKYCONV) $(SKYCONV_ARGS) --type cake --split $^ $(BUILD_DIR)/levels/ending
 
 # --------------------------------------
@@ -245,6 +249,8 @@ $(BUILD_DIR)/bin/eu/translation_fr.elf:  SEGMENT_ADDRESS := 0x19000000
 
 $(BUILD_DIR)/bin/%_skybox.c: textures/skyboxes/%.png
 	$(call print,Splitting:,$<,$@)
+	@mkdir -p $(@D)
+	@mkdir -p $(BUILD_DIR)/textures/skybox_tiles
 	$(V)$(SKYCONV) $(SKYCONV_ARGS) --type sky --split $^ $(BUILD_DIR)/bin
 
 $(BUILD_DIR)/bin/%_skybox.elf: SEGMENT_ADDRESS := 0x0A000000

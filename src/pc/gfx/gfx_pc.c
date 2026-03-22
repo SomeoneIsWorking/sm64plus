@@ -8,6 +8,9 @@
 #if defined(TARGET_MACOS) || defined(TARGET_LINUX)
 #include <libgen.h>
 #endif
+#ifdef TARGET_MACOS
+#include <mach-o/dyld.h>
+#endif
 #ifdef TARGET_LINUX
 #include <unistd.h>
 #endif

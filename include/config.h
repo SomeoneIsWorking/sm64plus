@@ -1,6 +1,10 @@
 #ifndef CONFIG_H
 #define CONFIG_H
 
+#if defined(TARGET_MACOS) || defined(TARGET_LINUX)
+#include <strings.h>
+#endif
+
 /**
  * @file config.h
  * A catch-all file for configuring various bugfixes and other settings

@@ -455,11 +455,22 @@ endif
 OBJDUMP := objdump
 OBJCOPY := objcopy
 PYTHON := python3
+HOST_ELF_CC := clang --target=x86_64-unknown-linux-gnu
 
-ifeq ($(TARGET_MACOS),1)
+ifeq ($(TARGET_WINDOWS),1)
   AS := i686-w64-mingw32-as
   OBJDUMP := i686-w64-mingw32-objdump
   OBJCOPY := i686-w64-mingw32-objcopy
+endif
+
+ifeq ($(TARGET_MACOS),1)
+  BINUTILS_PREFIX := $(shell brew --prefix binutils 2>/dev/null)
+  ifneq ($(wildcard $(BINUTILS_PREFIX)/bin/objdump),)
+    OBJDUMP := $(BINUTILS_PREFIX)/bin/objdump
+  endif
+  ifneq ($(wildcard $(BINUTILS_PREFIX)/bin/objcopy),)
+    OBJCOPY := $(BINUTILS_PREFIX)/bin/objcopy
+  endif
 endif
 
 # Platform-specific compiler and linker flags, including SDL stuff
@@ -685,9 +696,11 @@ $(BUILD_DIR)/src/game/hud.o: $(BUILD_DIR)/include/text_strings.h
 ifeq ($(CUSTOM_TEXTURES),1)
 
 $(BUILD_DIR)/%: %.png
+	@mkdir -p $(@D)
 	printf "%s%b" "$(patsubst %.png,%,$^)" '\0' > $@
 
 $(BUILD_DIR)/%.inc.c: $(BUILD_DIR)/% %.png
+	@mkdir -p $(@D)
 	hexdump -v -e '1/1 "0x%X,"' $< > $@
 	echo "0x00" >> $@
 	echo >> $@
@@ -702,20 +715,24 @@ TEXTURE_ENCODING := u8
 # Convert PNGs to RGBA32, RGBA16, IA16, IA8, IA4, IA1, I8, I4 binary files
 $(BUILD_DIR)/%: %.png
 	$(call print,Converting:,$<,$@)
+  @mkdir -p $(@D)
 	$(V)$(N64GRAPHICS) -s raw -i $@ -g $< -f $(lastword $(subst ., ,$@))
 
 $(BUILD_DIR)/%.inc.c: %.png
 	$(call print,Converting:,$<,$@)
+  @mkdir -p $(@D)
 	$(V)$(N64GRAPHICS) -s $(TEXTURE_ENCODING) -i $@ -g $< -f $(lastword ,$(subst ., ,$(basename $<)))
 
 # Color Index CI8
 $(BUILD_DIR)/%.ci8: %.ci8.png
 	$(call print,Converting:,$<,$@)
+  @mkdir -p $(@D)
 	$(V)$(N64GRAPHICS_CI) -i $@ -g $< -f ci8
 
 # Color Index CI4
 $(BUILD_DIR)/%.ci4: %.ci4.png
 	$(call print,Converting:,$<,$@)
+  @mkdir -p $(@D)
 	$(V)$(N64GRAPHICS_CI) -i $@ -g $< -f ci4
 
 endif
@@ -729,29 +746,35 @@ ifeq ($(TARGET_N64),1)
 # TODO: ideally this would be `-Trodata-segment=0x07000000` but that doesn't set the address
 $(BUILD_DIR)/%.elf: $(BUILD_DIR)/%.o
 	$(call print,Linking ELF file:,$<,$@)
+  @mkdir -p $(@D)
 	$(V)$(LD) -e 0 -Ttext=$(SEGMENT_ADDRESS) -Map $@.map -o $@ $<
 # Override for leveldata.elf, which otherwise matches the above pattern
 .SECONDEXPANSION:
 $(BUILD_DIR)/levels/%/leveldata.elf: $(BUILD_DIR)/levels/%/leveldata.o $(BUILD_DIR)/bin/$$(TEXTURE_BIN).elf
 	$(call print,Linking ELF file:,$<,$@)
+  @mkdir -p $(@D)
 	$(V)$(LD) -e 0 -Ttext=$(SEGMENT_ADDRESS) -Map $@.map --just-symbols=$(BUILD_DIR)/bin/$(TEXTURE_BIN).elf -o $@ $<
 
 $(BUILD_DIR)/%.bin: $(BUILD_DIR)/%.elf
 	$(call print,Extracting compressible data from:,$<,$@)
+  @mkdir -p $(@D)
 	$(V)$(EXTRACT_DATA_FOR_MIO) $< $@
 
 $(BUILD_DIR)/levels/%/leveldata.bin: $(BUILD_DIR)/levels/%/leveldata.elf
 	$(call print,Extracting compressible data from:,$<,$@)
+	@mkdir -p $(@D)
 	$(V)$(EXTRACT_DATA_FOR_MIO) $< $@
 
 # Compress binary file
 $(BUILD_DIR)/%.mio0: $(BUILD_DIR)/%.bin
 	$(call print,Compressing:,$<,$@)
+  @mkdir -p $(@D)
 	$(V)$(MIO0TOOL) $< $@
 
 # convert binary mio0 to object file
 $(BUILD_DIR)/%.mio0.o: $(BUILD_DIR)/%.mio0
 	$(call print,Converting MIO0 to ELF:,$<,$@)
+  @mkdir -p $(@D)
 	$(V)$(LD) -r -b binary $< -o $@
 endif
 
@@ -761,10 +784,12 @@ endif
 
 $(BUILD_DIR)/%.table: %.aiff
 	$(call print,Extracting codebook:,$<,$@)
+	@mkdir -p $(@D)
 	$(V)$(AIFF_EXTRACT_CODEBOOK) $< >$@
 
 $(BUILD_DIR)/%.aifc: $(BUILD_DIR)/%.table %.aiff
 	$(call print,Encoding ADPCM:,$(word 2,$^),$@)
+	@mkdir -p $(@D)
 	$(V)$(VADPCM_ENC) -c $^ $@
 
 $(ENDIAN_BITWIDTH): $(TOOLS_DIR)/determine-endian-bitwidth.c
@@ -777,6 +802,7 @@ $(ENDIAN_BITWIDTH): $(TOOLS_DIR)/determine-endian-bitwidth.c
 
 $(SOUND_BIN_DIR)/sound_data.ctl: sound/sound_banks/ $(SOUND_BANK_FILES) $(SOUND_SAMPLE_AIFCS) $(ENDIAN_BITWIDTH)
 	@$(PRINT) "$(GREEN)Generating:  $(BLUE)$@ $(NO_COL)\n"
+	@mkdir -p $(@D)
 	$(V)$(PYTHON) $(TOOLS_DIR)/assemble_sound.py $(BUILD_DIR)/sound/samples/ sound/sound_banks/ $(SOUND_BIN_DIR)/sound_data.ctl $(SOUND_BIN_DIR)/ctl_header $(SOUND_BIN_DIR)/sound_data.tbl $(SOUND_BIN_DIR)/tbl_header $(C_DEFINES) $$(cat $(ENDIAN_BITWIDTH))
 
 $(SOUND_BIN_DIR)/sound_data.tbl: $(SOUND_BIN_DIR)/sound_data.ctl
@@ -810,31 +836,38 @@ $(SOUND_BIN_DIR)/%.m64: $(SOUND_BIN_DIR)/%.o
 # Convert binary file to a comma-separated list of byte values for inclusion in C code
 $(BUILD_DIR)/%.inc.c: $(BUILD_DIR)/%
 	$(call print,Converting to C:,$<,$@)
+	@mkdir -p $(@D)
 	$(V)hexdump -v -e '1/1 "0x%X,"' $< > $@
 	$(V)echo >> $@
 
 # Generate animation data
 $(BUILD_DIR)/assets/mario_anim_data.c: $(wildcard assets/anims/*.inc.c)
 	@$(PRINT) "$(GREEN)Generating animation data $(NO_COL)\n"
+	@mkdir -p $(@D)
 	$(V)$(PYTHON) $(TOOLS_DIR)/mario_anims_converter.py > $@
 
 # Generate demo input data
 $(BUILD_DIR)/assets/demo_data.c: assets/demo_data.json $(wildcard assets/demos/*.bin)
 	@$(PRINT) "$(GREEN)Generating demo data $(NO_COL)\n"
+	@mkdir -p $(@D)
 	$(V)$(PYTHON) $(TOOLS_DIR)/demo_data_converter.py assets/demo_data.json $(DEF_INC_CFLAGS) > $@
 
 # Encode in-game text strings
 $(BUILD_DIR)/include/text_strings.h: include/text_strings.h.in
 	$(call print,Encoding:,$<,$@)
+	@mkdir -p $(@D)
 	$(V)$(TEXTCONV) charmap.txt $< $@
 $(BUILD_DIR)/include/text_menu_strings.h: include/text_menu_strings.h.in
 	$(call print,Encoding:,$<,$@)
+	@mkdir -p $(@D)
 	$(V)$(TEXTCONV) charmap_menu.txt $< $@
 $(BUILD_DIR)/text/%/define_courses.inc.c: text/define_courses.inc.c text/%/courses.h
 	@$(PRINT) "$(GREEN)Preprocessing: $(BLUE)$@ $(NO_COL)\n"
+	@mkdir -p $(@D)
 	$(V)$(CPP) $(CPPFLAGS) $< -o - -I text/$*/ | $(TEXTCONV) charmap.txt - $@
 $(BUILD_DIR)/text/%/define_text.inc.c: text/define_text.inc.c text/%/courses.h text/%/dialogs.h
 	@$(PRINT) "$(GREEN)Preprocessing: $(BLUE)$@ $(NO_COL)\n"
+	@mkdir -p $(@D)
 	$(V)$(CPP) $(CPPFLAGS) $< -o - -I text/$*/ | $(TEXTCONV) charmap.txt - $@
 
 # Level headers
@@ -861,14 +894,17 @@ $(GLOBAL_ASM_DEP).$(NON_MATCHING):
 # Compile C/C++ code
 $(BUILD_DIR)/%.o: %.cpp
 	$(call print,Compiling:,$<,$@)
+	@mkdir -p $(@D)
 	@$(CXX) -fsyntax-only $(CFLAGS) -MMD -MP -MT $@ -MF $(BUILD_DIR)/$*.d $<
 	$(V)$(CXX) -c $(CFLAGS) -o $@ $<
 $(BUILD_DIR)/%.o: %.c
 	$(call print,Compiling:,$<,$@)
+	@mkdir -p $(@D)
 	@$(CC_CHECK) $(CC_CHECK_CFLAGS) -MMD -MP -MT $@ -MF $(BUILD_DIR)/$*.d $<
 	$(V)$(CC) -c $(CFLAGS) -o $@ $<
 $(BUILD_DIR)/%.o: $(BUILD_DIR)/%.c
 	$(call print,Compiling:,$<,$@)
+	@mkdir -p $(@D)
 	@$(CC_CHECK) $(CC_CHECK_CFLAGS) -MMD -MP -MT $@ -MF $(BUILD_DIR)/$*.d $<
 	$(V)$(CC) -c $(CFLAGS) -o $@ $<
 
@@ -928,9 +964,27 @@ $(BUILD_DIR)/src/audio/seqplayer.copt: COPTFLAGS := -inline_manual
 endif
 
 # Assemble assembly code
+ifeq ($(TARGET_N64),1)
+$(BUILD_DIR)/%.o: %.s
+  $(call print,Assembling:,$<,$@)
+	@mkdir -p $(@D)
+	@mkdir -p $(dir $(BUILD_DIR)/$*.d)
+	$(V)$(CPP) $(CPPFLAGS) $< | $(AS) $(ASFLAGS) -MD $(BUILD_DIR)/$*.d -o $@
+else
+ifeq ($(TARGET_MACOS),1)
 $(BUILD_DIR)/%.o: %.s
 	$(call print,Assembling:,$<,$@)
+	@mkdir -p $(@D)
+	@mkdir -p $(dir $(BUILD_DIR)/$*.d)
+	$(V)$(HOST_ELF_CC) -c -x assembler-with-cpp $(DEF_INC_CFLAGS) -MMD -MP -MT $@ -MF $(BUILD_DIR)/$*.d -o $@ $<
+else
+$(BUILD_DIR)/%.o: %.s
+	$(call print,Assembling:,$<,$@)
+	@mkdir -p $(@D)
+	@mkdir -p $(dir $(BUILD_DIR)/$*.d)
 	$(V)$(CPP) $(CPPFLAGS) $< | $(AS) $(ASFLAGS) -MD $(BUILD_DIR)/$*.d -o $@
+endif
+endif
 
 # Assemble RSP assembly code
 $(BUILD_DIR)/rsp/%.bin $(BUILD_DIR)/rsp/%_data.bin: rsp/%.s
